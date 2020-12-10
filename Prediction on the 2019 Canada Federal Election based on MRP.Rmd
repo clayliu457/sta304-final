@@ -1,0 +1,43 @@
+---
+title: "Prediction on the 2019 Canada Federal Election based on MRP"
+author: "***"
+date: '2020-12-08'
+abstract: 'This study predicts the result of 2019 Canada Federal Election based on MRP method. Using the survey data to estimate the regression model, and then according to the census data to adjust the prediction. The results shows that, if all the votes join the election, the voting results will be the same/different with the truth.  '
+
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+keywords: Voting prediction, MRP, Canada Federal Election
+
+# Introduction
+
+Predicting election results is one of the most hot applications in statistics.  The predicted results may have an some impact on future elections. However, due to sampling error, survey data cannot represent the whole populaiton. How to eliminate sampling error and reduce estimated bias is a key research issue in statistics. MRP model is a method used to solve this problem.
+
+Combined the online survey data on the ces website and census in 2016, this paper is trying to estimate the results of 2019 Canadian Federal Election. According to Jack Bailey's idea, some voters will abandon the election during the election process, and this would cause the final election results may not reflect the who popualtion. Through the MRP method, the simulation results when all voters are elected, and used to check the result of 2019 Canada Federal Election.
+
+In the first section, survey data and cnesus data will be introduced. Then, how the MRP model will be build. The results on the MRP are listed in section 3. In the end, discussion on the results and potential weekness will be given. 
+
+## Data
+
+
+## Model
+
+
+## Results
+
+
+
+## Discussion
+
+
+## Weaknesses
+
+
+## References
+
+
+
