@@ -1,43 +1,286 @@
 ---
 title: "Prediction on the 2019 Canada Federal Election based on MRP"
-author: "***"
-date: '2020-12-08'
-abstract: 'This study predicts the result of 2019 Canada Federal Election based on MRP method. Using the survey data to estimate the regression model, and then according to the census data to adjust the prediction. The results shows that, if all the votes join the election, the voting results will be the same/different with the truth.  '
+author: "Liu, Zhitong"
+date: '2020-12-18'
+abstract: 'This study predicts the result of 2019 Canada Federal Election based on MRP method. Using the survey data to estimate the regression model, and then according to the census data to adjust the prediction. The results shows that both the Liberal Party and the Conservative Party are not enough to get the majority of votes. '
 
 output: pdf_document
 ---
+**keywords**: Voting prediction, MRP, Canada Federal Election
+
+
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(haven)
+library(NHANES)
+require(gridExtra)
+
+
 ```
 
-keywords: Voting prediction, MRP, Canada Federal Election
 
-# Introduction
+## Introduction
 
-Predicting election results is one of the most hot applications in statistics.  The predicted results may have an some impact on future elections. However, due to sampling error, survey data cannot represent the whole populaiton. How to eliminate sampling error and reduce estimated bias is a key research issue in statistics. MRP model is a method used to solve this problem.
+Predicting election results is one of the hottest applications in statistics.  The anticipated results may influence future elections. However, due to sampling error, the survey data collected from some particular website cannot represent the whole population. The result has some bias. How to reduce estimated bias is an essential research issue in statistics. MRP model is one of the methods used to solve this problem.
 
-Combined the online survey data on the ces website and census in 2016, this paper is trying to estimate the results of 2019 Canadian Federal Election. According to Jack Bailey's idea, some voters will abandon the election during the election process, and this would cause the final election results may not reflect the who popualtion. Through the MRP method, the simulation results when all voters are elected, and used to check the result of 2019 Canada Federal Election.
+According to Jack Bailey's idea, some voters will abandon the election during the election process, and this would cause the final election results may not reflect the population. The participation rate in the  2019 Canadian Federal Election is only 67%. The election's outcome was that the Liberal Party won the general election, but there were no more than half of the seats, and it could only be a minority party. The low Voter turnout may be the big concern in the voting. 
 
-In the first section, survey data and cnesus data will be introduced. Then, how the MRP model will be build. The results on the MRP are listed in section 3. In the end, discussion on the results and potential weekness will be given. 
+The CES website did an online survey to document Canadians' attitudes during and after the 2019 election. However, the surveyors on this website may not represent the whole population. Thus, we need another dataset to adjust the estimation. In the following, the multilevel regression and poststratification (MRP) method is used to estimate the voting outcome, including all the voters. we can use the calculated result to check the 2019 Canada Federal Election result. In the first section, survey data and gss data will be introduced , then how the MRP model will be built. The results of the MRP are listed in section 3. In the end, a discussion on the results and potential weaknesses will be given. 
+
 
 ## Data
+
+The CES online survey's original data contains 37822 observations and 620 variables, but there are too many NAs in these data. Before the follow-up analysis, we must clean these data first, according to the data response rate and importance. After cleaning, we finally select 31115 observations and nine variables. These data are summarized in Table 1. Because the data needs to be divided into cells in the MRP method, the digital variable age is divided into ten years old and divided into multiple groups in the data cleaning process, and individuals younger than 18 years old are filtered out. We believe that age, gender, education level, work status, and family situation will all affect the election.
+
+Through the summary table, we found that there is a serious imbalance in the data. For example, the number of women is 7000 more than the number of men, and only about 1% of the population with low education. Therefore, it is unreasonable to judge the general election situation only through the survey results, and the model needs to be revised with census data to obtain more accurate results. However, census data is difficult to obtain. This article uses GSS data instead of census data to describe the distribution of the Canadian population. The GSS data is officially collected and published and has a high reference value. In selecting survey variables, we must also consider the corresponding variables in the gss data. Figure 1 shows the distribution of age and education in the GSS data. The figure shows that the low-educated population accounts for nearly 10%. However, only 1% of the CES online survey data is a serious shortage.
+
+
+```{r,echo = FALSE}
+raw_data <- read_dta("2019 Canadian Election Study - Online Survey v1.0.dta")
+reduced_data <- 
+  raw_data %>% 
+  select(cps19_age,
+         cps19_gender,
+         cps19_education,
+         cps19_bornin_canada,
+         cps19_employment,
+         cps19_children,
+         cps19_income_cat,
+         #pes19_province,
+         cps19_marital,
+         cps19_votechoice) %>%filter(cps19_age >= 18) 
+
+#table(raw_data$cps19_education)
+#table(raw_data$cps19_employment)
+#table(raw_data$pes19_province)
+#sum(is.na(raw_data$pes19_province))
+#table(raw_data$cps19_bornin_canada)
+#table(raw_data$cps19_marital)
+```
+
+
+```{r,echo = FALSE}
+reduced_data<-reduced_data%>% mutate(age = case_when(
+                                             cps19_age <= 20  ~ '18 to 20',
+                                             cps19_age >20  & cps19_age <= 30 ~ '21 to 30',
+                                             cps19_age >30  & cps19_age <= 40 ~ '31 to 40',
+                                             cps19_age >40  & cps19_age <= 50 ~ '41 to 50',
+                                             cps19_age >50  & cps19_age <= 60 ~ '51 to 60',
+                                             cps19_age >60  & cps19_age <= 70 ~ '61 to 70',
+                                             cps19_age >70 ~ 'above 70'),
+                                     Male = cps19_gender == 1,
+                                     education = case_when(
+                                             cps19_education <= 3  ~ 'Less than highschool',
+                                             cps19_education == 4 | cps19_education == 5 ~ 'Highschool',
+                                             cps19_education == 6 | cps19_education == 7 ~ 'college',
+                                             cps19_education == 8 | cps19_education == 9 ~ 'bachelor',
+                                             cps19_education == 10 | cps19_education == 11 ~ 'master'
+                                             ),
+                                     full_time = cps19_employment == 1,
+                                     born_in_canada = cps19_bornin_canada == 1,
+                                     hh_income = cps19_income_cat,
+                                     marital = case_when(
+                                             cps19_marital <=1  ~ 'Married',
+                                             cps19_marital ==2  ~ 'Living common-law',
+                                             cps19_marital ==3  ~ 'Divorced',
+                                             cps19_marital ==4  ~ 'Separated',
+                                             cps19_marital ==5  ~ 'Widowed',
+                                             cps19_marital ==6  ~ 'Single, never married'),
+                                     Liberal_party = cps19_votechoice == 1,
+                                     Conservative_part = cps19_votechoice ==2,
+                                     has_child = cps19_children == 1
+                                     )
+survey_data <- reduced_data %>% select(age,Male,education,full_time,born_in_canada,has_child,marital,Liberal_party,Conservative_part)
+survey_data <- na.omit(survey_data)
+```
+
+
+```{r,echo = FALSE}
+# table(reduced_data$age)
+```
+
+**Table 1: Survey data**
+
+|Variabes                                                                          | Total =  31115|
+|----------------------------------------------------------------------------------|-----------------|
+| **age**                                                                        |                 |
+| 18 to 20                                                                     | 1221             |
+| 21 to 30                                                                         | 5247            |
+| 31 to 40                                                                         | 7112            |
+| 41 to 50                                                                         | 6221            |
+| 51 to 60                                                                         | 7121            |
+| 61 to 70                                                                         | 7347            |
+| above 70                                                                         | 3553            |
+| **Male**                                                                              |                 |
+| FALSE                                                                           | 22271           |
+| TRUE                                                                             | 15551            |
+| **education**                                                                        |                 |
+| bachelor                                                                         | 12908            |
+| college                                                                          | 12096            |
+| Highschool                                                                       | 7514            |
+| Less than highschool                                                             | 423             |
+| master                                                                          | 4782            |
+| **full-time**                                                                              |                 |
+| FALSE                                                                           | 21698           |
+| TRUE                                                                             | 16124            |
+| **born_in_canada**                                                                              |                 |
+| FALSE                                                                           | 6266           |
+| TRUE                                                                             | 31556            |
+| **has_child**                                                                              |                 |
+| True                                                                           | 22530           |
+| False                                                                             | 14904            |
+| **marital**                                                                        |                 |
+| Married                                                                     | 17230             |
+| Living common-law                                                                         | 6070            |
+| Divorced                                                                         | 2722            |
+| Widowed                                                                         | 1395            |
+| Separated                                                                         | 1374            |
+| Single, never married                                                                         | 8458            |
+| **Liberal_party**                                                                              |                 |
+| TRUE                                                                           | 8949           |
+| FALSE                                                                             | 22615            |
+| **Conservative_part**                                                                              |                 |
+| TRUE                                                                           | 8713           |
+| FALSE                                                                             | 22851            |
+
+
+
+
+```{r,echo = FALSE}
+gss = read.csv("gss.csv",header = TRUE) 
+clean_data <- gss %>% 
+  select(age, sex,place_birth_canada,total_children, education,marital_status) %>% filter(age >= 18)
+clean_data<-clean_data %>%mutate(age_group = case_when(
+                                             age <= 20  ~ '18 to 20',
+                                             age >20  & age <= 30 ~ '21 to 30',
+                                             age >30  & age <= 40 ~ '31 to 40',
+                                             age >40  & age <= 50 ~ '41 to 50',
+                                             age >50  & age <= 60 ~ '51 to 60',
+                                             age >60  & age <= 70 ~ '61 to 70',
+                                             age >70 ~ 'above 70'),
+                                   has_child = total_children > 0,
+                                   born_in_canada = place_birth_canada == "Born in Canada",
+                                 Male = sex == "Male",
+                                 marital = marital_status)
+levels(clean_data$education) = c("bachelor","college","Highschool","Less than highschool","college","college","master")
+clean_data$age = clean_data$age_group
+clean_data = na.omit(clean_data)
+census_data <- 
+  clean_data %>% 
+  count(age, Male ,education, born_in_canada, has_child) %>%
+  group_by(age, Male,education, born_in_canada, has_child) 
+
+census_data2 <- 
+  clean_data %>% 
+  count(age, Male ,education, born_in_canada, has_child,marital) %>%
+  group_by(age, Male,education, born_in_canada, has_child,marital) 
+
+```
+
+
+```{r,echo = FALSE, fig.cap = "Distribution of age, education and marital in Canada"}
+plot1<-clean_data %>% 
+  ggplot(aes(x = age)) +
+  geom_bar()
+plot2<-clean_data %>% 
+  ggplot(aes(x = education)) +
+  geom_bar()
+plot3<-clean_data %>% 
+  ggplot(aes(x = marital)) +
+  geom_bar()
+grid.arrange(plot1, plot2, plot3, ncol=1,nrow = 3)
+```
+
 
 
 ## Model
 
 
+According to the dummy type of output variable, we use logistic regression model to analyze it. The regression model formula is as follows:
+$$ logit(p) = X\beta +\epsilon$$
+where X is the predictor variables, p is the vote rate. However, the estimated result is just log odd, we need to do further transformation to obtain the success probability. The transformation formula is $\hat{p} = \frac{e^x\beta}{1+ e^x\beta}$.
+ After get the optimal model by AIC, the estimated probability will be adjusted according to the GSS data using Post stratification method. 
+
+
 ## Results
 
+We first estimate the election rate of the Liberal Party. Through the reverse selection method, we get the best estimation model. The results are shown in Table 2. The results show that age, education level, place of birth, and children are significant. Among them, families born in Canada and with children have a lower election rate for the Liberal Party. At the same time, a bachelor or more with higher education is more willing to support the Liberal Party. The supproting rate of 
+Corresponding results of the Conservative Party in Table 3 show that age, gender, education, place of birth, children, and marital status are all significant. Families with children are more willing to support the Conservative Party. Low-educated and male support for the Conservative Party is higher, while adults also support the Conservative Party.The Liberal Party’s support rate is 27.8%, and the Conservative Party’s support rate is 29.5%, which is higher than the Liberal Party.
+
+```{r,echo = FALSE}
+fullmodel <- glm(Liberal_party ~ age + Male +education+full_time+born_in_canada+has_child+marital, data=survey_data, family="binomial")
+final_model = step(fullmodel,trace = 0)
+res = summary(final_model)
+```
+
+
+**Table 2 results of Liberal_party**
+```{r,echo = FALSE}
+knitr::kable(round(res$coefficients,2))
+```
+
+
+
+```{r,echo = FALSE}
+census_data$logodds_estimate <-
+  final_model %>%
+  predict(newdata = census_data)
+census_data$logodds_estimate <-
+  final_model %>%
+  predict(newdata = census_data)
+census_data$estimate <-
+  exp(census_data$logodds_estimate)/(1+exp(census_data$logodds_estimate))
+census_data <- census_data %>%
+  mutate(alp_predict_prop = estimate*n) 
+alp_predict = sum(census_data$alp_predict_prop)/sum(census_data$n)
+#alp_predict
+```
+
+
+
+
+
+```{r,echo = FALSE}
+fullmodel2 <- glm(Conservative_part ~ age + Male +education+born_in_canada+has_child+marital, data=survey_data, family="binomial")
+final_model2 = step(fullmodel2,trace = 0)
+res2 = summary(final_model2)
+```
+
+
+**Table 3 Results of Conservative_part**
+```{r,echo = FALSE}
+knitr::kable(round(res2$coefficients,2))
+```
+
+```{r,echo = FALSE}
+census_data2$logodds_estimate <-
+  final_model2 %>%
+  predict(newdata = census_data2)
+census_data2$logodds_estimate <-
+  final_model2 %>%
+  predict(newdata = census_data2)
+census_data2$estimate <-
+  exp(census_data2$logodds_estimate)/(1+exp(census_data2$logodds_estimate))
+census_data2 <- census_data2 %>%
+  mutate(alp_predict_prop = estimate*n) 
+alp_predict = sum(census_data2$alp_predict_prop)/sum(census_data2$n)
+#alp_predict
+```
 
 
 ## Discussion
 
+The MRP method is used to estimate the support rate of the Liberal Party and the Conservative Party in 2019 Federal elections. The results show that the support rate of the two parties is not enough to exceed 50%. Therefore, in the 2019 federal election, the Liberal Party won the election with a slight advantage, and the formation of a minority government reflects certain Canadian current conditions. Comparing the regression results, we find that the Liberal Party and the Conservative Party are quite different in some individuals. For example, the Conservative Party favours middle-aged people and people with children, while young people and highly educated people favour the Liberal Party. High approval rate. However, in some respects, the policies of these two parties are not pleased. For example, born in Canada has negative coefficients.
 
 ## Weaknesses
 
+Although here uses GSS data to correct the deviations in the results of survey estimation, due to the large amount of missing data in GSS data, GSS can only reflect Canadians’ tendencies to a certain extent. However, we must realize that it is still consistent The census data is biased. If the census data crowded MRP estimates are available, the results will be more credible.
 
 ## References
+Stephenson, Laura B; Harell, Allison; Rubenson, Daniel; Loewen, Peter John, 2020, "2019 Canadian Election Study - Online Survey", https://doi.org/10.7910/DVN/DUS88V, Harvard Dataverse, V1
+
 
 
 
